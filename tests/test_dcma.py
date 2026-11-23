@@ -231,7 +231,7 @@ def test_zero_leads_are_pass_and_unknown_relationship_types_are_not_excluded():
     result = DCMAAssessmentService().analyze(s, ScheduleGraph(s), DCMAConfig())
     by_id = {metric.metric_id: metric for metric in result.metric_results}
 
-    assert by_id["leads"].status == DCMAStatus.PAS
+    assert by_id["leads"].status == DCMAStatus.PASS
     assert by_id["leads"].excluded_count == 0
     assert by_id["lags"].excluded_count == 0
     assert by_id["relationship_types"].eligible_count == 1
