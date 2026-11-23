@@ -1,0 +1,21 @@
+%T	PROJECT
+%F	proj_id	proj_short_name	proj_name	last_recalc_date
+%R	1	P1	Synthetic Project	2026-01-01
+%T	PROJWBS
+%F	wbs_id	wbs_short_name	wbs_name	parent_wbs_id
+%R	W1	1	Design	
+%T	TASK
+%F	task_id	task_code	task_name	proj_id	wbs_id	task_type	status_code	target_start_date	target_end_date	orgi_drtn_hr_cnt	remain_drtn_hr_cnt	total_float_hr_cnt	free_float_hr_cnt	phys_complete_pct
+%R	101	A100	Duplicate One	1	W1	TT_Task	TK_NotStart	2026-01-01	2026-01-05	40	40	-20	0	0
+%R	102	A100	Duplicate Two	1	W1	TT_Task	TK_Active	2026-01-03	2026-01-07	40	20	10	0	50
+%R	103	MS1	Start Milestone	1	W1	TT_StartMile	TK_NotStart	2026-01-01	2026-01-01	0	0	0	0	0
+%R	104	MS2	Finish Milestone	1	W1	TT_FinMile	TK_NotStart	2026-01-10	2026-01-10	0	0	0	0	0
+%T	TASKPRED
+%F	task_pred_id	pred_task_id	task_id	pred_type	lag_hr_cnt
+%R	R1	101	102	PR_FS	0
+%R	R2	102	104	PR_SS	100
+%R	R3	104	101	PR_FF	-5
+%R	BAD	999	104	PR_FS	badlag
+%T	CALENDAR
+%F	clndr_id	clndr_name	proj_id
+%R	C1	Standard	1

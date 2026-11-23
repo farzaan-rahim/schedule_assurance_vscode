@@ -1,0 +1,49 @@
+ERMHDR	19.12	2026-11-19	Project	ADMIN	Synthetic	dbxDatabaseNoName	Project Management	USD
+%T	PROJECT
+%F	proj_id	proj_short_name	proj_name	last_recalc_date	plan_start_date	plan_end_date
+%R	100	P5	Phase 5 Synthetic	2026-11-19 12:00	2026-11-01 08:00	2026-12-31 17:00
+%T	PROJWBS
+%F	wbs_id	proj_id	wbs_short_name	wbs_name	parent_wbs_id
+%R	W1	100	ROOT	Root	
+%T	CALENDAR
+%F	clndr_id	clndr_name	proj_id
+%R	C1	Standard	100
+%T	TASK
+%F	task_id	proj_id	wbs_id	clndr_id	status_code	task_type	task_code	task_name	target_start_date	target_end_date	remain_drtn_hr_cnt	target_drtn_hr_cnt	total_float_hr_cnt	phys_complete_pct
+%R	1	100	W1	C1	TK_NotStart	TT_Task	A100	Design	2026-11-20 08:00	2026-11-21 17:00	8	16	40	0
+%R	2	100	W1	C1	TK_Active	TT_Task	A200	Build	2026-11-22 08:00	2026-11-25 17:00	16	24	10	50
+%T	RSRC
+%F	rsrc_id	parent_rsrc_id	clndr_id	role_id	rsrsrc_id	rsrsrc_id2	pobs_id	guid	rsrc_seq_num	email_addr	employee_code	office_phone	other_phone	rsrc_name	rsrc_short_name	rsrc_title_name	def_qty_per_hr	cost_qty_type	ot_factor	active_flag	auto_compute_act_flag	def_cost_qty_link_flag	ot_flag	curr_id	unit_id	rsrc_type	location_id	rsrc_notes	load_tasks_flag	level_flag	last_checksum
+%R	R1		C1					G1	1	engineer@example.test	EMP1			Engineer	ENG		1	QT_Hour		Y	Y	Y	N	1		RT_Labor			Y	Y	
+%R	R2		C1					G2	2		EMP2			Inspector	INSP		1	QT_Hour		Y	Y	Y	N	1		RT_Labor			Y	Y	
+%T	TASKRSRC
+%F	taskrsrc_id	task_id	proj_id	cost_qty_link_flag	role_id	acct_id	rsrc_id	pobs_id	skill_level	remain_qty	target_qty	remain_qty_per_hr	target_lag_drtn_hr_cnt	target_qty_per_hr	act_ot_qty	act_reg_qty	relag_drtn_hr_cnt	ot_factor	cost_per_qty	target_cost	act_reg_cost	act_ot_cost	remain_cost	act_start_date	act_end_date	restart_date	reend_date	target_start_date	target_end_date	rem_late_start_date	rem_late_end_date	rollup_dates_flag	target_crv	remain_crv	actual_crv	ts_pend_act_end_flag	guid	rate_type	act_this_per_cost	act_this_per_qty	curv_id	rsrc_type	cost_per_qty_source_type	create_user	create_date	has_rsrchours	taskrsrc_sum_id
+%R	A1	1	100	Y		A1	R1			8	16				0	8			73	1168	584	0	584	2026-11-20 08:00	2026-11-21 17:00			2026-11-20 08:00	2026-11-21 17:00			Y				N	G3	COST_PER_QTY	0	0		RT_Labor	ST_Rsrc	admin	2026-11-19 12:00	Y	
+%R	A2	1	100	Y		A1	R2			4	8				0	4			50	400	200	0	200	2026-11-20 08:00	2026-11-21 17:00			2026-11-20 08:00	2026-11-21 17:00			Y				N	G4	COST_PER_QTY	0	0		RT_Labor	ST_Rsrc	admin	2026-11-19 12:00	Y	
+%T	ACTVTYPE
+%F	actv_code_type_id	actv_short_len	seq_num	actv_code_type	proj_id	wbs_id	actv_code_type_scope
+%R	T1	4	10	Discipline	100		AS_Project
+%R	T2	4	20	Area	100		AS_Project
+%T	ACTVCODE
+%F	actv_code_id	parent_actv_code_id	actv_code_type_id	actv_code_name	short_name	seq_num	color	total_assignments
+%R	V1		T1	Mechanical	MECH	10		
+%R	V2		T1	Electrical	ELEC	20		
+%R	V3		T2	North	NORTH	10		
+%T	TASKACTV
+%F	task_id	actv_code_type_id	actv_code_id	proj_id
+%R	1	T1	V1	100
+%R	1	T2	V3	100
+%R	2	T1	V2	100
+%T	UDFTYPE
+%F	udf_type_id	table_name	udf_type_name	udf_type_label	logical_data_type	super_flag	indicator_expression	summary_indicator_expression
+%R	U1	TASK	Text Field	Text Field	FT_TEXT	N		
+%R	U2	TASK	Numeric Field	Numeric Field	FT_NUMBER	N		
+%R	U3	TASK	Date Field	Date Field	FT_DATE	N		
+%R	U4	PROJECT	Project Status	Project Status	FT_STATICTYPE	N		
+%T	UDFVALUE
+%F	udf_type_id	fk_id	proj_id	udf_date	udf_number	udf_text	udf_code_id
+%R	U1	1	100			Alpha	
+%R	U2	1	100		123.5		
+%R	U3	1	100	2026-11-21 12:00			
+%R	U4	100	100			Green	
+%E
