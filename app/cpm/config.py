@@ -27,3 +27,20 @@ class CPMConfig:
     calculation_safety_bounds: int = 10000
 
     remaining_duration_preference: bool = True
+    duration_fallback_policy: str = "ORIGINAL_WITH_WARNING"
+    invalid_activity_policy: str = "ERROR"
+    loe_policy: str = "EXCLUDE"
+    completed_remaining_duration_policy: str = "ZERO_WITH_WARNING"
+    milestone_duration_policy: str = "ZERO_WITH_WARNING"
+    zero_duration_task_policy: str = "ALLOW"
+
+    completion_activity_id: str | None = None
+    completion_activity_code: str | None = None
+    required_finish_activity_id: str | None = None
+    required_finish_activity_code: str | None = None
+    project_completion_timestamp: datetime | None = None
+    maximum_critical_paths: int | None = None
+    maximum_near_critical_paths: int | None = None
+    maximum_path_nodes_inspected: int = 10000
+    comparison_date_tolerance_seconds: float = 0.0
+    comparison_float_tolerance_hours: float = 0.0

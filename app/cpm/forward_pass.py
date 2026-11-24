@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 
-from app.calendars.working_time import add_working_hours, subtract_working_hours
+from app.calendars.working_time import add_working_hours, next_working_time
 from app.cpm.constraint_math import forward_constraint
 from app.cpm.relationship_math import forward_successor_requirement
 
@@ -14,14 +14,14 @@ def forward_pass(schedule, graph, config, effective_states, calendars) -> dict:
     }
     queue = deque(activity_id for activity_id, degree in indegree.items() if degree == 0)
 
-    anchor = config.project_start_override or schedule.project.data_date or schedule.project.planned_start
+    anchor = max(t for t in (config.project_start_override, schedule.project.data_date if schedule.project else None) if t is not None)
     anchor_source = "CONFIGURED_PROJECT_START" if config.project_start_override else (
         "PROJECT_DATA_DATE" if schedule.project and schedule.project.data_date else "PROJECT_PLANNED_START"
     )
 
     early_starts: dict[str, object] = {}
     early_finishes: dict[str, object] = {}
-    controlling: dict[str, dict] = {activity_id: {"predecessors": [], "relationships": [], "constraint": None} for activity_id in schedule.activities_by_id}
+    controlling: dict[str, dict] = {activity_id: {"predecessors": [], "relationships": [], "constraint": None, "requirements": {}, "constraints": []} for activity_id in schedule.activities_by_id}
 
     for activity_id in schedule.activities_by_id:
         activity = schedule.activities_by_id[activity_id]
@@ -70,20 +70,28 @@ def forward_pass(schedule, graph, config, effective_states, calendars) -> dict:
                 calendar,
                 float(relationship.lag_hours),
             )
+            if effective[0] > 0:
+                required = next_working_time(calendar, required)
             candidate_starts.append((required, predecessor_id, relationship))
 
-        if candidate_starts:
-            latest = max(item[0] for item in candidate_starts)
+        # Relationships are lower bounds; they cannot pull remaining work
+        # before the project/Data Date anchor, even with a negative lag.
+        latest = max([anchor] + [item[0] for item in candidate_starts])
+
+        constraints = []
+        for constraint_type, constraint_date in ((activity.primary_constraint_type, activity.primary_constraint_date), (activity.secondary_constraint_type, activity.secondary_constraint_date)):
+            latest = forward_constraint(latest, constraint_type, constraint_date)
+            if constraint_type == "START_ON_OR_AFTER":
+                requirement = next_working_time(calendar, constraint_date) if effective[0] > 0 else constraint_date
+                constraints.append((constraint_type, constraint_date, requirement))
+        if effective[0] > 0:
+            latest = next_working_time(calendar, latest)
+        if effective[1] != "COMPLETE":
             controlling[activity_id]["predecessors"] = [item[1] for item in candidate_starts if item[0] == latest]
             controlling[activity_id]["relationships"] = [item[2].relationship_id for item in candidate_starts if item[0] == latest]
-        else:
-            latest = early_starts[activity_id]
-
-        constraint_date = activity.primary_constraint_date or activity.secondary_constraint_date
-        constraint_type = activity.primary_constraint_type or activity.secondary_constraint_type
-        latest = forward_constraint(latest, constraint_type, constraint_date)
-        if constraint_type:
-            controlling[activity_id]["constraint"] = constraint_type
+            controlling[activity_id]["requirements"] = {item[2].relationship_id:item[0] for item in candidate_starts if item[0] == latest}
+            controlling[activity_id]["constraints"] = [item for item in constraints if item[2] == latest]
+            controlling[activity_id]["constraint"] = next((item[0] for item in constraints if item[2] == latest), None)
 
         if effective[1] == "COMPLETE":
             pass

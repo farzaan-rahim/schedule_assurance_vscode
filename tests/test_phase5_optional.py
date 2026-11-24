@@ -1,3 +1,5 @@
+import pytest
+
 from pathlib import Path
 
 from app.importers.schedule_mapper import ScheduleMapper
@@ -84,6 +86,7 @@ def test_optional_table_absence_is_backward_compatible():
     assert result.statistics.udf_values == 0
 
 
+@pytest.mark.external_xer
 def test_nrg00800_optional_mapping_counts():
     result = ScheduleImportService().import_file("sample_data/NRG00800.xer")
     assert result.succeeded

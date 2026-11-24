@@ -16,37 +16,30 @@ def total_float(calendar, early_start, late_start, early_finish, late_finish):
     return start_method, finish_method
 
 
-def free_float(schedule, graph, calendar, activity_id, early_starts, early_finishes):
+def free_float_details(schedule, graph, calendar, activity_id, early_starts, early_finishes, lag_calendar_policy="PREDECESSOR"):
+    from app.calendars.working_time import inverse_lag_deadline
     successors = graph.successor_relationships.get(activity_id, [])
     if not successors:
-        return None
-
+        return None, (), "free_float_no_successor"
+    if calendar is None or lag_calendar_policy != "PREDECESSOR":
+        return None, (), "free_float_unsupported_methodology"
     candidates = []
     for relationship in successors:
-        successor = schedule.activities_by_id.get(relationship.successor_activity_id)
-        if successor is None:
-            continue
-        successor_calendar = schedule.calendars.get(successor.calendar_id)
-        if successor_calendar is None:
-            continue
+        kind = relationship.relationship_type.upper()
+        successor_id = relationship.successor_activity_id
+        if kind not in {"FS", "SS", "FF", "SF"} or successor_id not in schedule.activities_by_id:
+            return None, (), "free_float_missing_endpoint"
+        source = early_starts.get(activity_id) if kind in {"SS", "SF"} else early_finishes.get(activity_id)
+        target = early_starts.get(successor_id) if kind in {"FS", "SS"} else early_finishes.get(successor_id)
+        if source is None or target is None:
+            return None, (), "free_float_missing_dates"
+        # FS: EF -> successor ES; SS: ES -> ES; FF: EF -> EF; SF: ES -> EF.
+        # Invert the signed lag in the configured predecessor calendar, then
+        # measure available endpoint displacement in this activity's hours.
+        permitted = inverse_lag_deadline(calendar, target, float(relationship.lag_hours))
+        candidates.append((relationship.relationship_id, working_hours_between(calendar, source, permitted)))
+    return min(value for _, value in candidates), tuple(candidates), None
 
-        successor_es = early_starts.get(successor.activity_id)
-        if successor_es is None:
-            continue
 
-        lag = float(relationship.lag_hours)
-        relationship_type = relationship.relationship_type.upper()
-        if relationship_type == "FS":
-            allowed = successor_es
-        elif relationship_type == "SS":
-            allowed = successor_es
-        elif relationship_type == "FF":
-            allowed = successor_es
-        elif relationship_type == "SF":
-            allowed = successor_es
-        else:
-            continue
-
-        candidates.append(working_hours_between(calendar, early_finishes[activity_id], allowed))
-
-    return min(candidates) if candidates else None
+def free_float(schedule, graph, calendar, activity_id, early_starts, early_finishes, lag_calendar_policy="PREDECESSOR"):
+    return free_float_details(schedule, graph, calendar, activity_id, early_starts, early_finishes, lag_calendar_policy)[0]

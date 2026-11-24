@@ -1,5 +1,7 @@
 from datetime import date, datetime, time, timedelta
 
+import pytest
+
 from app.calendars.models import CalendarException, WorkDay, WorkPeriod, WeeklyWorkPattern
 from app.calendars.parser import parse_calendar_data
 from app.calendars.resolver import resolve_calendar_inheritance
@@ -72,7 +74,8 @@ def test_add_and_subtract_working_hours():
     assert add_working_hours(cal, datetime(2026, 11, 20, 11), 2) == datetime(2026, 11, 20, 14)
     assert add_working_hours(cal, datetime(2026, 11, 20, 17), 8) == datetime(2026, 11, 23, 17)
     assert add_working_hours(cal, datetime(2026, 11, 20, 9), 0) == datetime(2026, 11, 20, 9)
-    assert subtract_working_hours(cal, datetime(2026, 11, 20, 14), 2) == datetime(2026, 11, 20, 12)
+    # 14-13 (1h), skip lunch, then 12-11 (1h).
+    assert subtract_working_hours(cal, datetime(2026, 11, 20, 14), 2) == datetime(2026, 11, 20, 11)
 
 
 def test_calendar_inheritance_missing_and_cycle():
@@ -108,6 +111,7 @@ def test_p6_calendar_data_parser_split_shift_and_holiday():
     assert len(parsed.exceptions) == 2
 
 
+@pytest.mark.external_xer
 def test_real_xer_calendars_and_activity_coverage():
     from app.services.schedule_import import ScheduleImportService
 
@@ -125,3 +129,66 @@ def test_real_xer_calendars_and_activity_coverage():
     calendar_5829 = schedule.calendars["5829"]
     assert is_working_time(calendar_5829, datetime(2011, 8, 1, 9)) is True
     assert next_working_time(calendar_5829, datetime(2011, 7, 30, 17)) == datetime(2011, 8, 1, 8)
+
+
+@pytest.mark.parametrize("hours,expected", [
+    (1, datetime(2026, 11, 20, 13)),
+    (2, datetime(2026, 11, 20, 11)),
+    (3, datetime(2026, 11, 20, 10)),
+    (4, datetime(2026, 11, 20, 9)),
+    # 14-13 = 1h; 12-08 = 4h. Five hours ends at 08:00.
+    (5, datetime(2026, 11, 20, 8)),
+    (6, datetime(2026, 11, 19, 16)),
+])
+def test_subtract_across_lunch(hours, expected):
+    cal = calendar()
+    end = datetime(2026, 11, 20, 14)
+    result = subtract_working_hours(cal, end, hours)
+    assert result == expected
+    assert working_hours_between(cal, result, end) == hours
+
+
+@pytest.mark.parametrize("hour,minute", [(13, 0), (12, 0), (12, 30)])
+def test_subtract_period_boundary_and_gap(hour, minute):
+    # Positive subtraction from the afternoon opening or lunch resumes at
+    # the morning closing (12:00), then consumes one hour to 11:00.
+    cal = calendar()
+    end = datetime(2026, 11, 20, hour, minute)
+    assert subtract_working_hours(cal, end, 1) == datetime(2026, 11, 20, 11)
+    # Zero hours preserves the supplied instant, including non-working time.
+    assert subtract_working_hours(cal, end, 0) == end
+
+
+def test_subtract_weekend_and_holiday():
+    cal = calendar(exceptions=(CalendarException(date(2026, 11, 20), False),))
+    # Monday 09-08 = 1h; Friday holiday and weekend skipped; Thursday 17-16 = 1h.
+    end = datetime(2026, 11, 23, 9)
+    result = subtract_working_hours(cal, end, 2)
+    assert result == datetime(2026, 11, 19, 16)
+    assert working_hours_between(cal, result, end) == 2
+    assert subtract_working_hours(calendar(), end, 2) == datetime(2026, 11, 20, 16)
+
+
+@pytest.mark.parametrize("start", [
+    datetime(2026, 11, 19, 8), datetime(2026, 11, 19, 11),
+    datetime(2026, 11, 19, 12, 30), datetime(2026, 11, 19, 13),
+    datetime(2026, 11, 19, 17), datetime(2026, 11, 21, 10),
+])
+@pytest.mark.parametrize("hours", [0.5, 2, 5, 17.25])
+def test_working_time_add_subtract_inverse(start, hours):
+    cal = calendar(exceptions=(CalendarException(date(2026, 11, 20), False),))
+    finish = add_working_hours(cal, start, hours)
+    recovered = subtract_working_hours(cal, finish, hours)
+    # Forward positive work normalizes starts in gaps to the next working time.
+    assert recovered == next_working_time(cal, start)
+    assert working_hours_between(cal, recovered, finish) == hours
+
+
+def test_subtract_three_periods_without_assuming_gap_length():
+    cal = calendar(periods=(
+        WorkPeriod(time(6), time(8)), WorkPeriod(time(10), time(12)),
+        WorkPeriod(time(15), time(18)),
+    ))
+    # 18-15 (3h) + 12-10 (2h) + 08-07 (1h); gaps consume no work.
+    end = datetime(2026, 11, 20, 18)
+    assert subtract_working_hours(cal, end, 6) == datetime(2026, 11, 20, 7)

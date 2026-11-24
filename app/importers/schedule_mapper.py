@@ -306,6 +306,11 @@ class ScheduleMapper:
                 calendar_id=self._get_optional_value(row, "clndr_id"),
                 planned_start=parsed_date("planned_start", "target_start_date", "early_start_date", "start_date"),
                 planned_finish=parsed_date("planned_finish", "target_end_date", "early_end_date", "end_date"),
+                early_start=parsed_date("early_start", "early_start_date"),
+                early_finish=parsed_date("early_finish", "early_end_date"),
+                late_start=parsed_date("late_start", "late_start_date"),
+                late_finish=parsed_date("late_finish", "late_end_date"),
+                expected_finish=parsed_date("expected_finish", "expect_end_date"),
                 actual_start=parsed_date("actual_start", "act_start_date"),
                 actual_finish=parsed_date("actual_finish", "act_end_date"),
                 original_duration_hours=self._parse_float(

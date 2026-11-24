@@ -52,6 +52,13 @@ class Activity:
 
     percent_complete: float | None = None
 
+    # Imported P6 dates remain independent of planned dates and CPM results.
+    early_start: datetime | None = None
+    early_finish: datetime | None = None
+    late_start: datetime | None = None
+    late_finish: datetime | None = None
+    expected_finish: datetime | None = None
+
 
 @dataclass
 class Relationship:

@@ -1,0 +1,29 @@
+ERMHDR	19.12	2026-01-05	Synthetic regression fixture
+%T	PROJECT
+%F	proj_id	proj_short_name	proj_name	last_recalc_date
+%R	P1	SYNTHETIC	Controlled comparison	2026-01-05 08:00
+%T	PROJWBS
+%F	wbs_id	proj_id	wbs_short_name	wbs_name	parent_wbs_id
+%R	ROOT	P1	ROOT	Root	
+%R	W1	P1	AREA1	Area 1	ROOT
+%R	W2	P1	AREA2	Area 2	ROOT
+%T	CALENDAR
+%F	clndr_id	clndr_name	proj_id
+%R	C1	Synthetic calendar	P1
+%T	TASK
+%F	task_id	task_code	task_name	proj_id	wbs_id	clndr_id	task_type	status_code	target_start_date	target_end_date	target_drtn_hr_cnt	remain_drtn_hr_cnt	total_float_hr_cnt	free_float_hr_cnt	phys_complete_pct
+%R	200	A1000	A1000	P1	W1	C1	TT_Task	TK_NotStart	2026-02-23 08:00	2026-03-02 17:00	40	40	40	0	0
+%R	201	A1100	A1100	P1	W1	C1	TT_Task	TK_NotStart	2026-02-23 08:00	2026-03-02 17:00	40	40	40	0	0
+%R	202	A1200	Revised build	P1	W1	C1	TT_Task	TK_NotStart	2026-02-23 08:00	2026-03-09 17:00	80	80	-16	0	0
+%R	203	A1300	A1300	P1	W2	C1	TT_Task	TK_NotStart	2026-02-23 08:00	2026-03-02 17:00	40	40	40	0	0
+%R	204	M1400	M1400	P1	W1	C1	TT_FinMile	TK_NotStart	2026-04-13 08:00	2026-04-13 08:00	0	0	-12	0	0
+%R	205	A1600	A1600	P1	W1	C1	TT_Task	TK_NotStart	2026-02-23 08:00	2026-03-02 17:00	40	40	40	0	0
+%R	206	A1700	A1700	P1	W1	C1	TT_Task	TK_NotStart	2026-02-23 08:00	2026-03-02 17:00	40	40	40	0	0
+%T	TASKPRED
+%F	task_pred_id	pred_task_id	task_id	pred_type	lag_hr_cnt
+%R	R1	200	201	PR_FS	0
+%R	R2	201	202	PR_SS	40
+%R	R3	202	203	PR_FS	16
+%R	R4	203	204	PR_FS	0
+%R	R5	205	206	PR_FS	0
+%E

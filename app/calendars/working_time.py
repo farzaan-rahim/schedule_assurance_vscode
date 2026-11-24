@@ -22,165 +22,174 @@ def _periods_for_date(calendar, day) -> tuple[WorkPeriod, ...]:
     return _day_pattern(calendar, day)
 
 
-def is_working_time(calendar, timestamp: datetime) -> bool:
-    if timestamp.tzinfo is not None:
-        raise ValueError("Timezone-aware datetimes are not supported by P6 naive calendar arithmetic")
-
-    for period in _periods_for_date(calendar, timestamp.date()):
-        start, finish = _period_interval(timestamp.date(), period)
-        if start <= timestamp < finish:
-            return True
-    previous_day = timestamp.date() - timedelta(days=1)
-    for period in _periods_for_date(calendar, previous_day):
-        start, finish = _period_interval(previous_day, period)
-        if start <= timestamp < finish:
-            return True
-    return False
+def _period_interval(day, period):
+    start = datetime.combine(day, period.start)
+    finish = datetime.combine(day, period.finish)
+    if finish <= start:
+        finish += timedelta(days=1)
+    return start, finish
 
 
-def next_working_time(calendar, timestamp: datetime) -> datetime:
+def _intervals_for_date(calendar, day):
+    """Clip origin-day shifts (including overnight carry) and merge overlaps.
+
+    Exceptions belong to the day a shift starts. Its overnight portion remains
+    part of that shift on the following civil day.
+    """
+    lower = datetime.combine(day, datetime.min.time())
+    upper = lower + timedelta(days=1)
+    intervals = []
+    for origin in (day - timedelta(days=1), day):
+        for period in _periods_for_date(calendar, origin):
+            start, finish = _period_interval(origin, period)
+            start, finish = max(start, lower), min(finish, upper)
+            if start < finish:
+                intervals.append((start, finish))
+    merged = []
+    for start, finish in sorted(intervals):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(finish, merged[-1][1]))
+        else:
+            merged.append((start, finish))
+    return merged
+
+
+def _naive(timestamp):
     if timestamp.tzinfo is not None:
         raise ValueError("Timezone-aware datetimes are not supported")
 
+
+def is_working_time(calendar, timestamp: datetime) -> bool:
+    _naive(timestamp)
+    return any(start <= timestamp < finish for start, finish in _intervals_for_date(calendar, timestamp.date()))
+
+
+def next_working_time(calendar, timestamp: datetime) -> datetime:
+    _naive(timestamp)
     day = timestamp.date()
     for _ in range(3660):
-        periods = _periods_for_date(calendar, day)
-        for period in periods:
-            start, finish = _period_interval(day, period)
-            if timestamp < finish and timestamp < start:
-                return start
-            if start <= timestamp < finish:
-                return timestamp
+        for start, finish in _intervals_for_date(calendar, day):
+            if timestamp < finish:
+                return max(timestamp, start)
         day += timedelta(days=1)
         timestamp = datetime.combine(day, datetime.min.time())
     raise ValueError("Calendar has no reachable working time")
 
 
 def previous_working_time(calendar, timestamp: datetime) -> datetime:
-    if timestamp.tzinfo is not None:
-        raise ValueError("Timezone-aware datetimes are not supported")
-
+    _naive(timestamp)
     day = timestamp.date()
     for _ in range(3660):
-        periods = _periods_for_date(calendar, day)
-        for period in reversed(periods):
-            start, finish = _period_interval(day, period)
-            if timestamp > finish:
-                return finish
-            if start < timestamp <= finish:
-                return timestamp
+        for start, finish in reversed(_intervals_for_date(calendar, day)):
+            if start < timestamp:
+                return min(timestamp, finish)
+        timestamp = datetime.combine(day, datetime.min.time())
         day -= timedelta(days=1)
-        timestamp = datetime.combine(day, datetime.max.time().replace(microsecond=0))
     raise ValueError("Calendar has no reachable previous working time")
 
 
 def working_hours_between(calendar, start: datetime, finish: datetime) -> float:
-    if start.tzinfo is not None or finish.tzinfo is not None:
-        raise ValueError("Timezone-aware datetimes are not supported")
-
+    _naive(start)
+    _naive(finish)
+    sign = 1
     if finish < start:
-        return -working_hours_between(calendar, finish, start)
-
+        start, finish, sign = finish, start, -1
     total_seconds = 0.0
     day = start.date()
     while day <= finish.date():
-        for period in _periods_for_date(calendar, day):
-            period_start = datetime.combine(day, period.start)
-            period_finish = datetime.combine(day, period.finish)
-            overlap_start = max(start, period_start)
-            overlap_finish = min(finish, period_finish)
-            if overlap_finish > overlap_start:
-                total_seconds += (overlap_finish - overlap_start).total_seconds()
+        for left, right in _intervals_for_date(calendar, day):
+            lower, upper = max(start, left), min(finish, right)
+            if upper > lower:
+                total_seconds += (upper - lower).total_seconds()
         day += timedelta(days=1)
-    return total_seconds / SECONDS_PER_HOUR
+    return sign * total_seconds / SECONDS_PER_HOUR
+
+
+def _finite_hours(hours):
+    from math import isfinite
+    if not isfinite(hours):
+        raise ValueError("Working duration must be finite")
 
 
 def add_working_hours(calendar, start: datetime, hours: float) -> datetime:
-    if start.tzinfo is not None:
-        raise ValueError("Timezone-aware datetimes are not supported")
+    _naive(start)
+    _finite_hours(hours)
     if hours == 0:
         return start
     if hours < 0:
         return subtract_working_hours(calendar, start, -hours)
-
     current = next_working_time(calendar, start)
-    remaining_seconds = hours * SECONDS_PER_HOUR
-
+    remaining = timedelta(hours=hours)
+    day = current.date()
     for _ in range(3660 * 24):
-        periods = _periods_for_date(calendar, current.date())
-        progressed = False
-        for period in periods:
-            period_start, period_finish = _period_interval(current.date(), period)
-            if current < period_start:
-                current = period_start
-            if period_start <= current < period_finish:
-                available = (period_finish - current).total_seconds()
-                if remaining_seconds <= available:
-                    return current + timedelta(seconds=remaining_seconds)
-                remaining_seconds -= available
-                current = period_finish
-                progressed = True
-
-        if remaining_seconds <= 0:
-            return current
-
-        next_day = current.date() + timedelta(days=1)
-        current = datetime.combine(next_day, datetime.min.time())
-        current = next_working_time(calendar, current)
-
+        for lower, upper in _intervals_for_date(calendar, day):
+            current = max(current, lower)
+            if current < upper:
+                available = upper - current
+                if remaining <= available:
+                    return current + remaining
+                remaining -= available
+        day += timedelta(days=1)
+        current = datetime.combine(day, datetime.min.time())
     raise ValueError("Calendar has no reachable working time for the requested duration")
 
 
 def subtract_working_hours(calendar, start: datetime, hours: float) -> datetime:
-    if start.tzinfo is not None:
-        raise ValueError("Timezone-aware datetimes are not supported")
+    _naive(start)
+    _finite_hours(hours)
     if hours == 0:
         return start
     if hours < 0:
         return add_working_hours(calendar, start, -hours)
-
-    current = previous_working_time(calendar, start)
-    remaining = hours * SECONDS_PER_HOUR
-
+    current = start
+    day = current.date()
+    remaining = timedelta(hours=hours)
     for _ in range(3660 * 24):
-        periods = _periods_for_date(calendar, current.date())
-        for index, period in enumerate(periods):
-            period_start, period_finish = _period_interval(current.date(), period)
-            if period_start <= current <= period_finish:
-                if index > 0:
-                    previous_finish = datetime.combine(current.date(), periods[index - 1].finish)
-                else:
-                    previous_finish = None
-
-                available = (current - period_start).total_seconds()
+        for lower, upper in reversed(_intervals_for_date(calendar, day)):
+            current = min(current, upper)
+            if current > lower:
+                available = current - lower
                 if remaining <= available:
-                    return current - timedelta(seconds=remaining)
-
+                    return current - remaining
                 remaining -= available
-                if index > 0:
-                    morning_start, morning_finish = _period_interval(current.date(), periods[index - 1])
-                    morning_available = (morning_finish - morning_start).total_seconds()
-                    if remaining <= morning_available:
-                        return morning_finish - timedelta(seconds=max(0.0, remaining - SECONDS_PER_HOUR))
-                    remaining -= morning_available
-                    current = morning_start
-                else:
-                    current = period_start
-                break
-
-        if remaining <= 0:
-            return current
-
-        previous_day = current.date() - timedelta(days=1)
-        current = datetime.combine(previous_day, datetime.max.time().replace(microsecond=0))
-        current = previous_working_time(calendar, current)
-
+        current = datetime.combine(day, datetime.min.time())
+        day -= timedelta(days=1)
     raise ValueError("Calendar has no reachable previous working time")
 
 
-def _period_interval(day, period):
-    start = datetime.combine(day, period.start)
-    finish = datetime.combine(day, period.finish)
-    if period.finish.hour == 0 and period.finish <= period.start:
-        finish = datetime.combine(day + timedelta(days=1), period.finish)
-    return start, finish
+def working_boundaries_equivalent(calendar, first, second):
+    """Exact zero-work equivalence, not elapsed-time tolerance."""
+    return working_hours_between(calendar, first, second) == 0
+
+
+def start_for_finish_not_before(calendar, finish, duration):
+    """Earliest working start meeting a raw finish lower bound.
+
+    Datetimes have a discrete one-microsecond resolution. If the lower bound
+    lies in a non-working plateau, completing one tick after the next opening
+    is the earliest achievable finish. No elapsed/working tolerance is used.
+    """
+    if duration == 0:
+        return finish
+    candidate = subtract_working_hours(calendar, finish, duration)
+    if add_working_hours(calendar, candidate, duration) < finish:
+        opening = next_working_time(calendar, finish)
+        candidate = subtract_working_hours(calendar, opening + datetime.resolution, duration)
+    return next_working_time(calendar, candidate)
+
+
+def finish_for_start_not_after(calendar, start, duration):
+    """Latest finish whose duration subtraction does not exceed start bound."""
+    if duration == 0:
+        return start
+    candidate = add_working_hours(calendar, start, duration)
+    if subtract_working_hours(calendar, candidate, duration) > start:
+        candidate -= datetime.resolution
+    return candidate
+
+
+def inverse_lag_deadline(calendar, deadline, lag_hours):
+    """Latest source endpoint whose signed lag lands no later than deadline."""
+    if lag_hours >= 0:
+        return subtract_working_hours(calendar, deadline, lag_hours)
+    return finish_for_start_not_after(calendar, deadline, -lag_hours)

@@ -4,3 +4,8 @@ __pycache__/
 .env
 .vscode/
 sample_data/*.xer
+
+# Small synthetic regression fixtures are versioned; real XERs remain local.
+!sample_data/sample_baseline.xer
+!sample_data/sample_current.xer
+.pytest_cache/

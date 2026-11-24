@@ -100,13 +100,7 @@ def _parse_weekdays(content: str, calendar_id: str, diagnostics: list[CalendarDi
                     raw_value=period_match.group(0),
                 ))
                 continue
-            if finish <= start_time and finish != time(0, 0):
-                diagnostics.append(CalendarDiagnostic(
-                    code="work_period_finish_before_start", message="Calendar work period finish is not after start.",
-                    severity=CalendarDiagnosticSeverity.ERROR, calendar_id=calendar_id,
-                    raw_value=period_match.group(0),
-                ))
-                continue
+            # A finish at/before start denotes an overnight/full-day shift.
             periods.append(WorkPeriod(start=start_time, finish=finish))
 
         periods.sort(key=lambda period: period.start)
@@ -152,13 +146,7 @@ def _parse_exceptions(raw: str, calendar_id: str, diagnostics: list[CalendarDiag
                     raw_value=period_match.group(0),
                 ))
                 continue
-            if finish <= start and finish != time(0, 0):
-                diagnostics.append(CalendarDiagnostic(
-                    code="work_period_finish_before_start", message="Exception work period finish is not after start.",
-                    severity=CalendarDiagnosticSeverity.ERROR, calendar_id=calendar_id,
-                    raw_value=period_match.group(0),
-                ))
-                continue
+            # A finish at/before start denotes an overnight/full-day shift.
             periods.append(WorkPeriod(start=start, finish=finish))
 
         periods.sort(key=lambda period: period.start)
