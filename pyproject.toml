@@ -7,6 +7,6 @@ requires-python = ">=3.11"
 pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "-ra"
-markers = ["external_xer: requires the unavailable sanitized sample_data/NRG00800.xer"]
+markers = ["external_xer: requires the unavailable sanitized sample_data/NRG00800.xer", "postgres: requires an explicitly configured disposable PostgreSQL database"]
 
 

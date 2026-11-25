@@ -28,6 +28,8 @@ def activity_decision(activity, config, data_date):
         return reject("unsupported_activity_status", "Unknown or missing activity status.")
     if kind == "level_of_effort":
         return reject("loe_not_supported", "LOE scheduling is unsupported.", config.loe_policy)
+    if kind == "wbs_summary":
+        return reject("wbs_summary_not_scheduled", "WBS Summary is informational, not fixed-duration work.", "EXCLUDE")
     milestones = {"start_milestone", "finish_milestone", "milestone", "generic_milestone"}
     if kind not in milestones | {"task"}:
         return reject("unsupported_activity_type", "Unknown or missing activity type.")

@@ -4,6 +4,7 @@ from typing import Any
 class XERParser:
     CORE_TABLES = {
         "PROJECT",
+        "SCHEDOPTIONS",
         "PROJWBS",
         "TASK",
         "TASKPRED",

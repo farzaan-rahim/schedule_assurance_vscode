@@ -16,6 +16,12 @@ from app.cpm.validation import validate_date_invariants, validate_pass_relations
 class CPMService:
     def calculate(self, schedule, graph, config: CPMConfig | None = None) -> CPMResult:
         config = config or CPMConfig()
+        if config.component_calculation_policy == "DIRECTIONAL_FORWARD":
+            from app.cpm.directional import calculate_forward_scope
+            return calculate_forward_scope(schedule, graph, config)
+        if config.component_calculation_policy == "VALID_COMPONENTS":
+            from app.cpm.calculability import calculate_valid_components
+            return calculate_valid_components(self, schedule, graph, config)
         diagnostics, fatal = validate_schedule(schedule, graph, config)
 
         input_schedule = schedule

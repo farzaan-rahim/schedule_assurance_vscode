@@ -75,6 +75,13 @@ def parse_calendar_data(calendar) -> object:
     )
 
 
+def _work_period_tokens(content: str):
+    """Read start/finish by their keys, independent of XER token order."""
+    for match in re.finditer(r"([sf])\|([^|)]+)\|([sf])\|([^|)]+)", content):
+        values = {match.group(1): match.group(2), match.group(3): match.group(4)}
+        yield match, _parse_time(values.get("s", "")), _parse_time(values.get("f", ""))
+
+
 def _parse_weekdays(content: str, calendar_id: str, diagnostics: list[CalendarDiagnostic]) -> tuple[WorkDay, ...]:
     days: dict[int, WorkDay] = {}
     markers = list(re.finditer(r"\(0\|\|(\d+)\(\)", content))
@@ -90,9 +97,7 @@ def _parse_weekdays(content: str, calendar_id: str, diagnostics: list[CalendarDi
         body = content[marker.end():end]
         periods: list[WorkPeriod] = []
 
-        for period_match in re.finditer(r"f\|([^|)]+)\|s\|([^|)]+)", body):
-            finish = _parse_time(period_match.group(1))
-            start_time = _parse_time(period_match.group(2))
+        for period_match, start_time, finish in _work_period_tokens(body):
             if start_time is None or finish is None:
                 diagnostics.append(CalendarDiagnostic(
                     code="malformed_work_period", message="Calendar contains an invalid work period time.",
@@ -136,9 +141,7 @@ def _parse_exceptions(raw: str, calendar_id: str, diagnostics: list[CalendarDiag
         body = raw[match.end():end]
         periods: list[WorkPeriod] = []
 
-        for period_match in re.finditer(r"f\|([^|)]+)\|s\|([^|)]+)", body):
-            finish = _parse_time(period_match.group(1))
-            start = _parse_time(period_match.group(2))
+        for period_match, start, finish in _work_period_tokens(body):
             if start is None or finish is None:
                 diagnostics.append(CalendarDiagnostic(
                     code="malformed_work_period", message="Calendar exception contains an invalid work period time.",

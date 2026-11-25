@@ -3,11 +3,11 @@ from __future__ import annotations
 from collections import deque
 
 from app.calendars.working_time import add_working_hours, next_working_time
-from app.cpm.constraint_math import forward_constraint
+from app.cpm.constraint_math import forward_constraint_requirement
 from app.cpm.relationship_math import forward_successor_requirement
 
 
-def forward_pass(schedule, graph, config, effective_states, calendars) -> dict:
+def forward_pass(schedule, graph, config, effective_states, calendars, relationship_requirement=None) -> dict:
     indegree = {
         activity_id: len([r for r in graph.predecessor_relationships.get(activity_id, []) if r.predecessor_activity_id in schedule.activities_by_id])
         for activity_id in schedule.activities_by_id
@@ -62,7 +62,7 @@ def forward_pass(schedule, graph, config, effective_states, calendars) -> dict:
                 effective_duration_hours=effective[0],
             )
 
-            required = forward_successor_requirement(
+            required = (relationship_requirement or forward_successor_requirement)(
                 relationship,
                 predecessor,
                 successor,
@@ -70,6 +70,8 @@ def forward_pass(schedule, graph, config, effective_states, calendars) -> dict:
                 calendar,
                 float(relationship.lag_hours),
             )
+            if required is None:
+                continue  # Explicit historical-only requirement in the opt-in progress scope.
             if effective[0] > 0:
                 required = next_working_time(calendar, required)
             candidate_starts.append((required, predecessor_id, relationship))
@@ -80,10 +82,11 @@ def forward_pass(schedule, graph, config, effective_states, calendars) -> dict:
 
         constraints = []
         for constraint_type, constraint_date in ((activity.primary_constraint_type, activity.primary_constraint_date), (activity.secondary_constraint_type, activity.secondary_constraint_date)):
-            latest = forward_constraint(latest, constraint_type, constraint_date)
-            if constraint_type == "START_ON_OR_AFTER":
-                requirement = next_working_time(calendar, constraint_date) if effective[0] > 0 else constraint_date
-                constraints.append((constraint_type, constraint_date, requirement))
+            if effective[1] != "COMPLETE":
+                requirement = forward_constraint_requirement(constraint_type, constraint_date, calendar, effective[0])
+                if requirement is not None:
+                    latest = max(latest, requirement)
+                    constraints.append((constraint_type, constraint_date, requirement))
         if effective[0] > 0:
             latest = next_working_time(calendar, latest)
         if effective[1] != "COMPLETE":

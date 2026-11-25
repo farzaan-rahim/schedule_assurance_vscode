@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from app.cpm.constraint_math import SUPPORTED_CONSTRAINTS, forward_constraint_requirement, backward_constraint_requirement
 from app.cpm.config import CPMConfig
 from app.cpm.models import CPMDiagnostic, CPMFindingSeverity
 from app.importers.p6_normalization import normalize_status
@@ -15,6 +16,8 @@ def validate_schedule(schedule, graph, config: CPMConfig):
     def error(code, message, **kwargs):
         diagnostics.append(CPMDiagnostic(code, message, CPMFindingSeverity.ERROR, **kwargs))
     options = {
+        "component_calculation_policy": {"STRICT", "VALID_COMPONENTS", "DIRECTIONAL_FORWARD"},
+        "progress_scheduling_policy": {"APPLICATION_REMAINING", "P6_RETAINED_LOGIC"},
         "lag_calendar_policy": {"PREDECESSOR"},
         "missing_calendar_policy": {"ERROR", "EXCLUDE"},
         "missing_duration_policy": {"ERROR", "EXCLUDE"},
@@ -49,11 +52,13 @@ def validate_schedule(schedule, graph, config: CPMConfig):
         value = getattr(config, name)
         if value is not None and (not isinstance(value, str) or not value.strip()):
             error("invalid_completion_selector", "Completion selectors must be non-empty strings.")
+    if config.progress_scheduling_policy == "P6_RETAINED_LOGIC" and config.component_calculation_policy != "DIRECTIONAL_FORWARD":
+        error("unsupported_progress_scope", "P6 progress support is forward-only; backward/float methodology is unchanged.")
     timestamps = [config.project_start_override, config.required_project_finish, config.project_completion_timestamp]
     if schedule.project:
         timestamps += [schedule.project.data_date, schedule.project.planned_start]
     for a in schedule.activities.values():
-        timestamps += [getattr(a, name) for name in ("planned_start", "planned_finish", "actual_start", "actual_finish", "primary_constraint_date", "secondary_constraint_date", "early_start", "early_finish", "late_start", "late_finish", "expected_finish")]
+        timestamps += [getattr(a, name) for name in ("planned_start", "planned_finish", "actual_start", "actual_finish", "primary_constraint_date", "secondary_constraint_date", "early_start", "early_finish", "late_start", "late_finish", "expected_finish", "remaining_start", "remaining_finish", "suspend_date", "resume_date")]
     if any(t is not None and (not isinstance(t, datetime) or t.tzinfo is not None) for t in timestamps):
         error("timezone_mixing", "CPM requires naive project-local datetime values.")
     if diagnostics:
@@ -78,7 +83,9 @@ def validate_schedule(schedule, graph, config: CPMConfig):
         state, findings, disposition = activity_decision(a, config, data_date)
         diagnostics.extend(findings)
         calendar = schedule.calendars.get(a.calendar_id)
-        if calendar is None:
+        calendar_usable = False
+        informational_exclusion = disposition == "EXCLUDE" and any(d.code in {"loe_not_supported", "wbs_summary_not_scheduled"} for d in findings)
+        if calendar is None and not informational_exclusion:
             policy = config.missing_calendar_policy
             diagnostics.append(CPMDiagnostic("missing_activity_calendar", "Activity calendar is unavailable.", CPMFindingSeverity.ERROR if policy == "ERROR" else CPMFindingSeverity.WARNING, activity_id=a.activity_id, metadata={"disposition": policy}))
         elif disposition == "INCLUDE":
@@ -88,15 +95,29 @@ def validate_schedule(schedule, graph, config: CPMConfig):
                 if calendar.weekly_pattern is not None and len(calendar.weekly_pattern.days) != 7:
                     raise ValueError("Weekly pattern must have seven days")
                 next_working_time(calendar, anchor)
+                calendar_usable = True
             except (ValueError, IndexError, TypeError) as exc:
                 error("unusable_activity_calendar", str(exc), activity_id=a.activity_id)
-        for kind, stamp in ((a.primary_constraint_type, a.primary_constraint_date), (a.secondary_constraint_type, a.secondary_constraint_date)):
+        for slot, kind, stamp in (("PRIMARY", a.primary_constraint_type, a.primary_constraint_date), ("SECONDARY", a.secondary_constraint_type, a.secondary_constraint_date)):
             if kind is None and stamp is None:
                 continue
-            if kind not in {"START_ON_OR_AFTER", "FINISH_ON_OR_BEFORE"}:
+            if kind not in SUPPORTED_CONSTRAINTS:
                 error("unsupported_constraint", "Constraint is not implemented by this CPM increment.", activity_id=a.activity_id)
             elif stamp is None:
                 error("malformed_constraint", "Constraint requires a datetime.", activity_id=a.activity_id)
+            elif state and state[1] == "COMPLETE":
+                diagnostics.append(CPMDiagnostic("historical_constraint_not_applied", "Supported historical constraint retained; actuals are not rescheduled.", CPMFindingSeverity.INFORMATIONAL, activity_id=a.activity_id, metadata={"constraint_type": kind, "constraint_slot": slot, "constraint_date": stamp.isoformat()}))
+        if state and state[1] != "COMPLETE" and calendar_usable:
+            from app.calendars.working_time import subtract_working_hours
+            pairs = ((a.primary_constraint_type, a.primary_constraint_date), (a.secondary_constraint_type, a.secondary_constraint_date))
+            if all(k is None or (k in SUPPORTED_CONSTRAINTS and t is not None) for k, t in pairs):
+                try:
+                    lower = [v for k, t in pairs if t is not None for v in [forward_constraint_requirement(k, t, calendar, state[0])] if v is not None]
+                    upper = [subtract_working_hours(calendar, v, state[0]) for k, t in pairs if t is not None for v in [backward_constraint_requirement(k, t, calendar, state[0])] if v is not None]
+                    if lower and upper and max(lower) > min(upper):
+                        diagnostics.append(CPMDiagnostic("conflicting_constraint_window", "Both soft bounds retained; empty constraint window can produce negative float.", CPMFindingSeverity.WARNING, activity_id=a.activity_id, metadata={"earliest_start_bound": max(lower).isoformat(), "latest_start_bound": min(upper).isoformat()}))
+                except (ValueError, OverflowError):
+                    pass  # Unusable calendars retain their fatal validation finding.
     if not schedule.activities:
         error("no_eligible_activities", "Schedule has no activities.")
     return diagnostics, any(d.severity == CPMFindingSeverity.ERROR for d in diagnostics)
@@ -147,6 +168,12 @@ def validate_date_invariants(schedule, states, forward, backward):
             if duration:
                 valid = valid and is_working_time(cal, es) and is_working_time(cal, ls)
                 valid = valid and all(is_working_time(cal, t) or previous_working_time(cal, t) == t for t in (ef, lf))
+        if state != "COMPLETE":
+            pairs = ((a.primary_constraint_type, a.primary_constraint_date), (a.secondary_constraint_type, a.secondary_constraint_date))
+            for kind, stamp in pairs:
+                endpoint = {"START_ON_OR_AFTER": es, "FINISH_ON_OR_AFTER": ef, "START_ON_OR_BEFORE": ls, "FINISH_ON_OR_BEFORE": lf}.get(kind)
+                if endpoint is not None and stamp is not None:
+                    valid = valid and (endpoint >= stamp if kind.endswith("AFTER") else endpoint <= stamp)
         if not valid:
             diagnostics.append(CPMDiagnostic("date_invariant_failed", "Date/duration or calendar-boundary invariant failed; float withheld.", CPMFindingSeverity.ERROR, activity_id=activity_id))
     return diagnostics

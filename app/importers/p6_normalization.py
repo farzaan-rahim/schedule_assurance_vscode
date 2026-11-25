@@ -37,6 +37,9 @@ def normalize_activity_type(raw_value: str | None) -> str | None:
         "TT_TASK": "task",
         "TASK": "task",
         "TT_LOEP": "level_of_effort",
+        "TT_LOE": "level_of_effort",
+        "TT_WBS": "wbs_summary",
+        "WBS_SUMMARY": "wbs_summary",
         "LEVEL OF EFFORT": "level_of_effort",
     }
     return mapping.get(upper, cleaned.casefold())
@@ -75,7 +78,10 @@ def normalize_constraint_type(raw_value: str | None) -> str | None:
         "CS_FNET": "FINISH_ON_OR_AFTER",
         "CS_FNLT": "FINISH_ON_OR_BEFORE",
         "CS_ALAP": "AS_LATE_AS_POSSIBLE",
-        "CS_MSOB": "MUST_START_ON",
+        "CS_MSOA": "START_ON_OR_AFTER",
+        "CS_MEOB": "FINISH_ON_OR_BEFORE",
+        "CS_MEOA": "FINISH_ON_OR_AFTER",
+        "CS_MSOB": "START_ON_OR_BEFORE",
         "CS_MFOB": "MUST_FINISH_ON",
     }
     return mapping.get(upper, upper)

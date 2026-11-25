@@ -14,6 +14,10 @@ class CPMConfig:
     project_start_override: datetime | None = None
     required_project_finish: datetime | None = None
 
+    # STRICT retains the original all-or-nothing contract.
+    component_calculation_policy: str = "STRICT"
+    progress_scheduling_policy: str = "APPLICATION_REMAINING"
+
     missing_calendar_policy: str = "ERROR"
     missing_duration_policy: str = "ERROR"
     lag_calendar_policy: str = "PREDECESSOR"

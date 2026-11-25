@@ -4,7 +4,7 @@ from collections import deque
 from types import SimpleNamespace
 
 from app.calendars.working_time import previous_working_time, subtract_working_hours
-from app.cpm.constraint_math import backward_constraint
+from app.cpm.constraint_math import backward_constraint_requirement
 from app.cpm.relationship_math import reverse_predecessor_requirement
 
 
@@ -50,10 +50,11 @@ def backward_pass(schedule, graph, config, effective_states, calendars, forward,
 
         constraints = []
         for constraint_type, constraint_date in ((activity.primary_constraint_type, activity.primary_constraint_date), (activity.secondary_constraint_type, activity.secondary_constraint_date)):
-            earliest = backward_constraint(earliest, constraint_type, constraint_date)
-            if constraint_type == "FINISH_ON_OR_BEFORE":
-                requirement = previous_working_time(calendar, constraint_date) if effective_states[activity_id][0] > 0 else constraint_date
-                constraints.append((constraint_type, constraint_date, requirement))
+            if effective_states[activity_id][1] != "COMPLETE":
+                requirement = backward_constraint_requirement(constraint_type, constraint_date, calendar, effective_states[activity_id][0])
+                if requirement is not None:
+                    earliest = min(earliest, requirement)
+                    constraints.append((constraint_type, constraint_date, requirement))
         if effective_states[activity_id][0] > 0:
             earliest = previous_working_time(calendar, earliest)
         if effective_states[activity_id][1] != "COMPLETE":

@@ -3,9 +3,15 @@ __pycache__/
 *.py[cod]
 .env
 .vscode/
-sample_data/*.xer
+# sample_data/*.xer
+sample_data/1414_RSM-RSM-CW-PWD-RPT-PRM0-00063_C01 Appendix.10 - OL-RSSOM-PWS_June 2026.xer
 
 # Small synthetic regression fixtures are versioned; real XERs remain local.
 !sample_data/sample_baseline.xer
 !sample_data/sample_current.xer
 .pytest_cache/
+
+# Local imported-source storage and developer environment files
+var/
+.env.*
+!.env.example

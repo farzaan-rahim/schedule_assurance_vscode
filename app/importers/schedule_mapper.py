@@ -20,6 +20,7 @@ from app.models.schedule import (
     UDFDefinition,
     UDFValue,
 )
+from app.models.scheduling_options import P6SchedulingOptions
 from app.models.schedule import Calendar
 from app.models.schedule import Project
 from app.models.schedule import Relationship
@@ -55,6 +56,7 @@ class ScheduleMapper:
             schedule.project = self._map_project(project_rows)
 
         project_id = schedule.project.project_id if schedule.project else None
+        schedule.scheduling_options = self._map_scheduling_options(tables.get("SCHEDOPTIONS", []), project_id, diagnostics)
 
         wbs_rows = tables.get("PROJWBS", [])
         if project_id:
@@ -253,6 +255,33 @@ class ScheduleMapper:
             ))
 
         return calendars
+    def _map_scheduling_options(self, rows, project_id, diagnostics):
+        selected = [r for r in rows if r.get("proj_id") == project_id]
+        if not selected:
+            return None
+        if len(selected) != 1:
+            diagnostics.append(ImportDiagnostic("ambiguous_scheduling_options", "Multiple option rows for selected project.", ImportDiagnosticSeverity.ERROR, table="SCHEDOPTIONS"))
+            return None
+        row = selected[0]
+        def flag(name):
+            value = row.get(name, "").strip()
+            if value in {"Y", "N"}:
+                return value == "Y"
+            if value:
+                diagnostics.append(ImportDiagnostic("invalid_scheduling_option", "Expected Y/N flag; value retained but not guessed.", ImportDiagnosticSeverity.ERROR, table="SCHEDOPTIONS", field_name=name, raw_value=value))
+            return None
+        return P6SchedulingOptions(
+            project_id=project_id,
+            retained_logic=flag("sched_retained_logic"),
+            progress_override=flag("sched_progress_override"),
+            ss_lag_from_early_start=flag("sched_lag_early_start_flag"),
+            use_expected_finish=flag("sched_use_expect_end_flag"),
+            lag_calendar_policy={"rcal_Predecessor": "PREDECESSOR"}.get(row.get("sched_calendar_on_relationship_lag")),
+            external_relationship_policy={"SD_Both": "BOTH"}.get(row.get("sched_outer_depend_type")),
+            set_planned_to_forecast=flag("sched_setplantoforecast"),
+            raw_fields=tuple(sorted((str(k), str(v)) for k, v in row.items())),
+        )
+
     def _map_activities(
             self,
             rows: list[dict[str, Any]],
@@ -311,6 +340,11 @@ class ScheduleMapper:
                 late_start=parsed_date("late_start", "late_start_date"),
                 late_finish=parsed_date("late_finish", "late_end_date"),
                 expected_finish=parsed_date("expected_finish", "expect_end_date"),
+                remaining_start=parsed_date("remaining_start", "restart_date"),
+                remaining_finish=parsed_date("remaining_finish", "reend_date"),
+                duration_type=self._get_optional_value(row, "duration_type"),
+                suspend_date=parsed_date("suspend_date", "suspend_date"),
+                resume_date=parsed_date("resume_date", "resume_date"),
                 actual_start=parsed_date("actual_start", "act_start_date"),
                 actual_finish=parsed_date("actual_finish", "act_end_date"),
                 original_duration_hours=self._parse_float(

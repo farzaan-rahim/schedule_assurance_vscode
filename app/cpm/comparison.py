@@ -9,6 +9,7 @@ from math import isfinite
 
 from app.cpm.models import (CPMActivityComparison, CPMComparisonMetric,
                             CPMComparisonSummary, CPMDiagnostic, CPMFindingSeverity)
+from app.cpm.constraint_math import SUPPORTED_CONSTRAINTS
 from app.importers.p6_normalization import normalize_status
 
 DATE_METRICS = ("early_start", "early_finish", "late_start", "late_finish")
@@ -80,16 +81,27 @@ def capability_diagnostics(schedule, config):
         hints.append(CPMDiagnostic(code, message, CPMFindingSeverity.INFORMATIONAL,
             metadata={"support":support, "observed":evidence is not None,
                       "evidence":evidence, "cause_established":False}))
-    hint("p6_scheduling_options_unobserved",
-        "SCHEDOPTIONS is not in the canonical model. Retained Logic, Progress Override, longest-path and multiple-float-path settings were not observed or applied; these are possible capability differences, not established causes.",
-        "INFORMATIONAL_ONLY")
+    options = schedule.scheduling_options
+    if options is None:
+        hint("p6_scheduling_options_unobserved",
+            "SCHEDOPTIONS was not available for the selected project; no P6 option is guessed or applied.",
+            "INFORMATIONAL_ONLY")
+    else:
+        hint("p6_scheduling_options_observed", "Identified typed P6 options are observed; only explicitly selected supported policies are applied.", "PARTIALLY_SUPPORTED",
+             {"retained_logic": options.retained_logic, "progress_override": options.progress_override,
+              "ss_lag_from_early_start": options.ss_lag_from_early_start,
+              "use_expected_finish": options.use_expected_finish,
+              "lag_calendar_policy": options.lag_calendar_policy})
     hint("p6_critical_definition_capability",
         "Imported critical state is a Total-Float-threshold proxy, not an imported P6 critical flag/definition. Possible capability difference; no discrepancy cause is established.",
         "UNSUPPORTED")
     progress = tuple(sorted(a.activity_id for a in schedule.activities.values()
         if normalize_status(a.raw_status if a.raw_status is not None else a.status) == "in_progress"))
     if progress:
-        hint("progress_policy_capability", "Remaining work starts at Data Date. P6 Retained Logic/Progress Override behavior is not implemented; possible capability difference only.", "PARTIALLY_SUPPORTED", progress)
+        message = ("Narrow retained remaining-work and SS expired-lag support is forward-only; full P6 progress/late-date equivalence is not established."
+                   if config.component_calculation_policy == "DIRECTIONAL_FORWARD" and config.progress_scheduling_policy == "P6_RETAINED_LOGIC"
+                   else "Remaining work starts at Data Date. This scope does not implement P6 Retained Logic/Progress Override; possible capability difference only.")
+        hint("progress_policy_capability", message, "PARTIALLY_SUPPORTED", progress)
     def naive(value):
         return isinstance(value, datetime) and value.tzinfo is None
     out_of_sequence = []
@@ -120,7 +132,7 @@ def capability_diagnostics(schedule, config):
     if out_of_sequence:
         hint("observed_out_of_sequence_progress", "Actual relationship endpoints violate the application signed-lag requirement on these relationships. This observed progress condition does not identify P6 scheduling options or prove a comparison-difference cause.", "UNSUPPORTED", tuple(sorted(out_of_sequence)))
     if any(r.lag_hours != 0 for r in schedule.relationships):
-        hint("lag_calendar_capability", "Application lag uses the configured predecessor calendar. P6 lag-calendar options are unobserved; possible capability difference only.", "PARTIALLY_SUPPORTED", config.lag_calendar_policy)
+        hint("lag_calendar_capability", "Application lag uses the configured predecessor calendar; typed P6 lag policy is retained when observed. No discrepancy cause is inferred.", "PARTIALLY_SUPPORTED", {"application": config.lag_calendar_policy, "p6": options.lag_calendar_policy if options else None})
     expected = tuple(sorted(a.activity_id for a in schedule.activities.values() if a.expected_finish is not None))
     if expected:
         hint("expected_finish_capability", "Expected Finish is preserved as imported evidence but is not applied to CPM; possible capability difference only.", "UNSUPPORTED", expected)
@@ -130,7 +142,7 @@ def capability_diagnostics(schedule, config):
     if external:
         hint("external_relationship_capability", "External/missing endpoints prevent supported CPM calculation; they are not silently supplied. No discrepancy cause is inferred.", "UNSUPPORTED", tuple(sorted(external)))
     constraints = tuple(sorted({kind for a in schedule.activities.values() for kind in (a.primary_constraint_type,a.secondary_constraint_type)
-                               if kind and kind not in {"START_ON_OR_AFTER","FINISH_ON_OR_BEFORE"}}))
+                               if kind and kind not in SUPPORTED_CONSTRAINTS}))
     if constraints:
         hint("unsupported_constraint_capability", "Observed constraints are outside the supported subset; possible capability difference only.", "UNSUPPORTED", constraints)
     resource_dependent = tuple(sorted(a.activity_id for a in schedule.activities.values() if a.activity_type in {"resource_dependent","tt_rsrc"}))

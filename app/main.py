@@ -3,6 +3,9 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from app.api.reports import router as reporting_router
+from app.api.cpm_analysis import router as cpm_analysis_router
+from app.api.persistence import router as persistence_router
 
 from app.comparison.engine import ScheduleComparisonEngine
 from app.comparison.models import ScheduleVersion, ScheduleVersionType
@@ -16,6 +19,11 @@ app = FastAPI(
     description="Clean-room Primavera P6 schedule analysis platform.",
     version="0.1.0",
 )
+
+
+app.include_router(reporting_router)
+app.include_router(cpm_analysis_router)
+app.include_router(persistence_router)
 
 
 @app.get("/api/health", tags=["System"])

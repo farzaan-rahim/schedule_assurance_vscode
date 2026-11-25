@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
+from app.models.scheduling_options import P6SchedulingOptions
 
 @dataclass
 class Project:
@@ -58,6 +59,11 @@ class Activity:
     late_start: datetime | None = None
     late_finish: datetime | None = None
     expected_finish: datetime | None = None
+    remaining_start: datetime | None = None
+    remaining_finish: datetime | None = None
+    duration_type: str | None = None
+    suspend_date: datetime | None = None
+    resume_date: datetime | None = None
 
 
 @dataclass
@@ -112,6 +118,8 @@ class Schedule:
     udf_definitions: dict[str, UDFDefinition] = field(default_factory=dict)
     udf_values: list[UDFValue] = field(default_factory=list)
     udf_values_by_activity_id: dict[str, list[UDFValue]] = field(default_factory=dict)
+
+    scheduling_options: P6SchedulingOptions | None = None
 
     def get_activity(self, activity_code: str) -> Activity | None:
         matches = self.activities_by_code.get(activity_code, [])

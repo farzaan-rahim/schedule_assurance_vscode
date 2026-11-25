@@ -62,6 +62,17 @@ class CPMConstraintControl:
 
 
 @dataclass(frozen=True)
+class CPMProgressState:
+    actual_start: datetime | None
+    actual_finish: datetime | None
+    data_date: datetime | None
+    observed_through: datetime | None
+    imported_remaining_start: datetime | None
+    imported_remaining_finish: datetime | None
+    remaining_duration_hours: float | None
+
+
+@dataclass(frozen=True)
 class CPMActivityResult:
     activity_id: str
     activity_code: str
@@ -104,6 +115,10 @@ class CPMActivityResult:
     effective_finish_anchor: datetime | None = None
     imported_actual_start: datetime | None = None
     imported_actual_finish: datetime | None = None
+    progress_state: CPMProgressState | None = None
+    early_date_status: str = "NOT_EVALUATED"
+    late_date_status: str = "NOT_EVALUATED"
+    float_status: str = "NOT_EVALUATED"
     controlling_relationships: tuple[CPMRelationshipControl, ...] = ()
     controlling_constraints: tuple[CPMConstraintControl, ...] = ()
 
@@ -236,6 +251,42 @@ class CPMPath:
 
 
 @dataclass(frozen=True)
+class CPMActivityCalculability:
+    activity_id: str
+    component_id: str
+    status: str
+    reason_codes: tuple[str, ...] = ()
+    early_date_status: str = "NOT_EVALUATED"
+    late_date_status: str = "NOT_EVALUATED"
+    float_status: str = "NOT_EVALUATED"
+    blocking_predecessor_ids: tuple[str, ...] = ()
+    forward_boundary_status: str = "NOT_EVALUATED"
+
+
+@dataclass(frozen=True)
+class CPMRelationshipCalculability:
+    relationship_id: str
+    status: str
+    reason_codes: tuple[str, ...] = ()
+    forward_status: str = "NOT_EVALUATED"
+    backward_status: str = "NOT_EVALUATED"
+    forward_requirement_timestamp: datetime | None = None
+    expired_lag_hours: float | None = None
+    remaining_lag_hours: float | None = None
+
+
+@dataclass(frozen=True)
+class CPMComponentCalculability:
+    component_id: str
+    activity_count: int
+    relationship_count: int
+    status: str
+    reason_codes: tuple[str, ...]
+    blocking_activity_ids: tuple[str, ...]
+    calculated_finish: datetime | None = None
+
+
+@dataclass(frozen=True)
 class CPMResult:
     status: str
     config_version: str
@@ -264,3 +315,9 @@ class CPMResult:
     path_statistics: tuple[CPMPathTraceStatistics, ...] = ()
     comparison_summary: CPMComparisonSummary | None = None
     comparison_diagnostics: tuple[CPMDiagnostic, ...] = ()
+    activity_calculability: tuple[CPMActivityCalculability, ...] = ()
+    relationship_calculability: tuple[CPMRelationshipCalculability, ...] = ()
+    components: tuple[CPMComponentCalculability, ...] = ()
+    blocked_activity_count: int = 0
+    partially_calculated_activity_count: int = 0
+    reliability_scope: str = "COMPLETE_SCHEDULE"
