@@ -4,8 +4,6 @@ from app.comparison.models import ComparisonResult
 from app.dcma.config import DCMAConfig
 from app.dcma.metrics import (
     baseline_metrics,
-    critical_path_test,
-    cpli_metric,
     duration_metric,
     hard_constraints,
     float_metrics,
@@ -16,6 +14,7 @@ from app.dcma.metrics import (
 )
 from app.dcma.models import DCMAAssessmentResult, DCMADiagnostic
 from app.dcma.scoring import calculate_dcma_score
+from app.dcma.cpm_metrics import critical_path_test, cpli_metric
 
 
 class DCMAAssessmentService:
@@ -45,8 +44,8 @@ class DCMAAssessmentService:
             invalid_dates(schedule, config),
             resource_metric(schedule, config),
             missed,
-            critical_path_test(),
-            cpli_metric(),
+            critical_path_test(schedule, config.cpm_config, config.critical_path_test_config),
+            cpli_metric(schedule, config.cpm_config, config.cpli_config),
             bei,
         )
 

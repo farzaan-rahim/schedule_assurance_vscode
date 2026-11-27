@@ -5,8 +5,11 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
 
 
+PROJECT_ROOT=Path(__file__).resolve().parents[2]
+
+
 class PersistenceSettings(BaseSettings):
-    model_config=SettingsConfigDict(env_prefix='SA_',env_file='.env',extra='ignore')
+    model_config=SettingsConfigDict(env_prefix='SA_',env_file=PROJECT_ROOT/'.env',extra='ignore')
     database_url: SecretStr | None=None
     storage_root: Path=Path('var/source-files')
     maximum_upload_bytes: int=100*1024*1024

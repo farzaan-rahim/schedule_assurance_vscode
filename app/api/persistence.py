@@ -107,13 +107,13 @@ async def get_project(project_id:UUID,services:PersistenceServices=Depends(get_p
 
 @router.post('/api/projects/{project_id}/schedule-versions',status_code=201)
 async def import_version(project_id:UUID,file:UploadFile=File(...),label:str=Form(...),
-        version_type:Literal['BASELINE','UPDATE','CURRENT','SNAPSHOT']=Form('UPDATE'),services:PersistenceServices=Depends(get_persistence_services)):
+        version_type:Literal['BASELINE','UPDATE','CURRENT','SNAPSHOT']=Form('UPDATE'),source_project_id:str | None=Form(None),services:PersistenceServices=Depends(get_persistence_services)):
     if not (file.filename or '').lower().endswith('.xer'):raise HTTPException(415,'Upload a .xer source file.')
     content=bytearray()
     while chunk:=await file.read(1024*1024):
         if len(content)+len(chunk)>services.maximum_upload_bytes:raise HTTPException(413,'Upload exceeds the configured size limit.')
         content.extend(chunk)
-    result=await invoke(services.importer.import_bytes,bytes(content),file.filename,label=label,version_type=version_type,project_id=project_id)
+    result=await invoke(services.importer.import_bytes,bytes(content),file.filename,label=label,version_type=version_type,project_id=project_id,**({"source_project_id":source_project_id} if source_project_id is not None else {}))
     return jsonable_encoder(result)
 
 

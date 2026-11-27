@@ -55,13 +55,14 @@ class PersistedScheduleImportService:
     def __init__(self,session_factory,storage,importer=None):
         self.sessions=session_factory;self.storage=storage;self.importer=importer or ScheduleImportService()
 
-    def import_bytes(self,content,filename,*,label,version_type='UPDATE',project_id=None):
+    def import_bytes(self,content,filename,*,label,version_type='UPDATE',project_id=None,source_project_id=None):
         if not label or not label.strip():raise ImportRejected('A schedule version label is required.')
         if version_type not in {'BASELINE','UPDATE','CURRENT','SNAPSHOT'}:raise ImportRejected('Unknown schedule version type.')
         version_id=uuid4();source=self.storage.store(content,filename,version_id)
         commit_attempted=False;resolved_project_id=project_id
         try:
-            imported=self.importer.import_file(self.storage.resolve(source.relative_path))
+            import_options={'source_project_id':source_project_id} if source_project_id is not None else {}
+            imported=self.importer.import_file(self.storage.resolve(source.relative_path),**import_options)
             if not imported.succeeded or imported.schedule is None or imported.schedule.project is None:
                 raise ImportRejected('XER import failed; no version was committed.',tuple(imported.diagnostics))
             schedule=imported.schedule
@@ -113,6 +114,11 @@ class PersistenceCatalogService:
                 result=dto(ProjectInfo,row)
             return result
         except IntegrityError as exc:raise ImportRejected('Project code already exists.') from exc
+
+    def find_project_by_code(self,code):
+        with self.sessions() as session:
+            row=ProjectRepository(session).by_code(code)
+            return dto(ProjectInfo,row) if row is not None else None
 
     def list_projects(self,offset=0,limit=100):
         with self.sessions() as s:return tuple(dto(ProjectInfo,r) for r in ProjectRepository(s).list(offset,limit))

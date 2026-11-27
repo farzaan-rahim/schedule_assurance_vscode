@@ -19,7 +19,7 @@ class ScheduleImportService:
         self.parser = parser or XERParser()
         self.mapper = mapper or ScheduleMapper()
 
-    def import_file(self, file_path: str | Path) -> ScheduleImportResult:
+    def import_file(self, file_path: str | Path, *, source_project_id: str | None = None) -> ScheduleImportResult:
         diagnostics: list[ImportDiagnostic] = []
         statistics = ImportStatistics()
 
@@ -39,6 +39,23 @@ class ScheduleImportService:
                 severity=ImportDiagnosticSeverity.FATAL,
             ))
             return ScheduleImportResult(None, None, statistics, diagnostics)
+
+        if source_project_id is not None:
+            matches = [row for row in tables.get("PROJECT", []) if row.get("proj_id", "").strip() == source_project_id]
+            if len(matches) != 1:
+                diagnostics.append(ImportDiagnostic(
+                    code="source_project_selection_invalid",
+                    message="Selected source project is missing or ambiguous in the XER.",
+                    severity=ImportDiagnosticSeverity.FATAL, table="PROJECT", field_name="proj_id",
+                    raw_value=source_project_id,
+                ))
+                return ScheduleImportResult(None, None, statistics, diagnostics)
+            # Restrict identity before the existing mapper. Do not rewrite the source file.
+            tables = dict(tables, PROJECT=matches)
+            selected_tasks = {r.get("task_id") for r in tables.get("TASK", []) if r.get("proj_id", "").strip() == source_project_id}
+            tables["TASKPRED"] = [r for r in tables.get("TASKPRED", [])
+                if r.get("proj_id", "").strip() == source_project_id or
+                not r.get("proj_id", "").strip() and r.get("task_id") in selected_tasks]
 
         schedule = self.mapper.map(tables, diagnostics)
         graph = ScheduleGraph(schedule)

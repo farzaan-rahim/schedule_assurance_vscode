@@ -660,3 +660,10 @@ def _dcma_payload(result) -> dict[str, object]:
         "diagnostics": [vars(diagnostic) for diagnostic in result.diagnostics],
         "truncation": result.truncation,
     }
+
+
+# Presentation is mounted separately; analytical/API routes remain unchanged.
+from app.runtime import install_runtime
+from app.ui.setup import install_ui
+install_runtime(app)
+install_ui(app)

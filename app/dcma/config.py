@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from app.cpm.config import CPMConfig
+from app.cpm.simulation import CriticalPathTestConfig
+from app.cpm.cpli import CPLIConfig
 
 
 @dataclass(frozen=True)
 class DCMAConfig:
-    version: str = "DCMA-STYLE-PHASE4-V1"
+    version: str = "DCMA-STYLE-PHASE8-V1"
 
     missing_logic_warning_pct: float = 5.0
     missing_logic_fail_pct: float = 10.0
@@ -68,3 +71,8 @@ class DCMAConfig:
         "cpli": 1.0,
         "bei": 1.0,
     })
+
+    # Application methodology inputs; no database/host-specific policy.
+    cpm_config: CPMConfig = field(default_factory=CPMConfig)
+    critical_path_test_config: CriticalPathTestConfig = field(default_factory=CriticalPathTestConfig)
+    cpli_config: CPLIConfig = field(default_factory=CPLIConfig)
